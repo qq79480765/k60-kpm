@@ -1,0 +1,48 @@
+name: 'Enable SUSFS Kernel Configs'
+description: 'Enable SUSFS-related kernel configuration options'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Declare KSU_SUSFS_PRIORITY_UID_FILTER Kconfig symbol
+      # SukiSU-Ultra (1cfa5734) calls susfs_parse_priority_app_strings() /
+      # susfs_set_priority_uid_filter() unconditionally from
+      # manager/pkg_observer.c and supercall/dispatch.c, but its kernel/Kconfig
+      # does not declare CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER. The SUSFS header
+      # keeps both prototypes behind that #ifdef, so the defconfig entry alone
+      # is dropped by olddefconfig and the build dies with
+      # -Werror,-Wimplicit-function-declaration. Declare the symbol here so the
+      # config entry below survives and fs/susfs.c compiles the implementation.
+      shell: bash
+      run: |
+        set -euo pipefail
+        KC="$(find -L "$GITHUB_WORKSPACE/kernel" -maxdepth 8 -path '*/drivers/kernelsu/Kconfig' -not -path '*/.git/*' 2>/dev/null | head -n1 || true)"
+        if [ -z "$KC" ]; then
+          echo "[-] no drivers/kernelsu/Kconfig (non-KSU flavor); skipping"
+          exit 0
+        fi
+        echo "[*] Kconfig at: $KC -> $(readlink -f "$KC")"
+        KC="$(readlink -f "$KC")"
+        if grep -q "config KSU_SUSFS_PRIORITY_UID_FILTER" "$KC"; then
+          echo "[*] $KC already declares KSU_SUSFS_PRIORITY_UID_FILTER"
+        else
+          printf '\nconfig KSU_SUSFS_PRIORITY_UID_FILTER\n\tbool "Enable SUSFS priority uid filter"\n\tdepends on KSU_SUSFS\n\tdefault y\n' >> "$KC"
+          echo "[+] Appended KSU_SUSFS_PRIORITY_UID_FILTER to $KC"
+        fi
+        grep -A3 "config KSU_SUSFS_PRIORITY_UID_FILTER" "$KC"
+
+    - name: Enable SUSFS Kernel Configs
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+          CONFIG_KSU_SUSFS_SUS_MAP=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y

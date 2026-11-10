@@ -1,0 +1,47 @@
+name: KPM Kernel Build
+
+# Single-purpose entry point: SukiSU-Ultra + SUSFS + KPM for android12-5.10,
+# 2025-05 (matching the K60's stock 5.10.236 kernel).
+#
+# workflow_dispatch needs the `workflow` OAuth scope on the local gh token;
+# a push that touches the trigger file starts the exact same build using plain
+# git credentials, which is how this fork gets driven from the workstation.
+on:
+  # repository_dispatch only needs `repo` scope, unlike workflow_dispatch which
+  # additionally requires the `workflow` scope on the caller's token.
+  repository_dispatch:
+    types: [kpm-build]
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/kpm-build-trigger'
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/prepare.yml
+    with:
+      config_file: .github/config/android12-5.10.json
+      # SUSFS only: KPM is the new variable here, keep every other patch out of
+      # the first build so a failure can only come from KPM or the root flavor.
+      feature_set: SUSFS
+      root_flavor: sukisu-ultra
+      # Same audited pins main.yml uses in commit_mode=verified.
+      root_commit: 1cfa57340590971cba7521ed536da8ebbedc5f0a
+      susfs_commit: b0e474642cf77ee797004a454fa441362723d0ba
+      # Empty = branch tip (NoMount dev, kernel_patches main, AnyKernel3 gki-2.0).
+      nomount_commit: ''
+      kernel_patches_commit: ''
+      anykernel3_commit: ''
+      # 'Wild' on purpose: a stock-looking version string makes vendor modules
+      # load against a kernel whose symbol CRCs no longer match.
+      brand_name: Wild
+      keep_kmi: false
+      os_patch_level: '2025-05'
+      page_size: 4k
+      enable_kpm: true
+    secrets: inherit
